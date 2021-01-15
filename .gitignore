@@ -10,3 +10,10 @@
 
 # Coverage data
 /coverage.out
+
+# vim
+*~
+*.swp
+
+# binary
+/main
