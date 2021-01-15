@@ -4,4 +4,12 @@ same as shiori, but without logo and no accounts.
 
 minimmal code modification.
 
+to compile:
+
+`go clean; go generate; go build`
+
+to run:
+
+`./main serve`
+
 working demo [achoz.ahoxus.org](https://achoz.ahoxus.org)
