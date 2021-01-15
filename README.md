@@ -10,6 +10,6 @@ to compile:
 
 to run:
 
-`./main serve`
+`./shiori serve`
 
 working demo [achoz.ahoxus.org](https://achoz.ahoxus.org)
