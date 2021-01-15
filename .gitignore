@@ -15,8 +15,3 @@
 *~
 *.swp
 
-# binary
-/main
-/shiori
-/*.shiori
-
