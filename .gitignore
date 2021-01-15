@@ -17,3 +17,6 @@
 
 # binary
 /main
+/shiori
+/*.shiori
+
