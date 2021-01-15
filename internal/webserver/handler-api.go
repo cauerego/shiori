@@ -11,123 +11,16 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"shiori/internal/core"
 	"shiori/internal/database"
 	"shiori/internal/model"
-	"github.com/gofrs/uuid"
 	"github.com/julienschmidt/httprouter"
 	"golang.org/x/crypto/bcrypt"
 )
 
-// apiLogin is handler for POST /api/login
-func (h *handler) apiLogin(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	// Decode request
-	request := struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-		Remember int    `json:"remember"`
-		Owner    bool   `json:"owner"`
-	}{}
-
-	err := json.NewDecoder(r.Body).Decode(&request)
-	checkError(err)
-
-	// Prepare function to generate session
-	genSession := func(account model.Account, expTime time.Duration) {
-		// Create session ID
-		sessionID, err := uuid.NewV4()
-		checkError(err)
-
-		// Save session ID to cache
-		strSessionID := sessionID.String()
-		h.SessionCache.Set(strSessionID, account, expTime)
-
-		// Save user's session IDs to cache as well
-		// useful for mass logout
-		sessionIDs := []string{strSessionID}
-		if val, found := h.UserCache.Get(request.Username); found {
-			sessionIDs = val.([]string)
-			sessionIDs = append(sessionIDs, strSessionID)
-		}
-		h.UserCache.Set(request.Username, sessionIDs, -1)
-
-		// Send login result
-		account.Password = ""
-		loginResult := struct {
-			Session string        `json:"session"`
-			Account model.Account `json:"account"`
-		}{strSessionID, account}
-
-		w.Header().Set("Content-Type", "application/json")
-		err = json.NewEncoder(w).Encode(&loginResult)
-		checkError(err)
-	}
-
-	// Check if user's database is empty or there are no owner.
-	// If yes, and user uses default account, let him in.
-	searchOptions := database.GetAccountsOptions{
-		Owner: true,
-	}
-
-	accounts, err := h.DB.GetAccounts(searchOptions)
-	checkError(err)
-
-	if len(accounts) == 0 {
-		genSession(model.Account{
-			Username: "shiori",
-			Owner:    true,
-		}, time.Hour)
-		return
-	}
-
-	// Get account data from database
-	account, exist := h.DB.GetAccount(request.Username)
-	if !exist {
-		panic(fmt.Errorf("username doesn't exist"))
-	}
-
-	// Compare password with database
-	err = bcrypt.CompareHashAndPassword([]byte(account.Password), []byte(request.Password))
-	if err != nil {
-		panic(fmt.Errorf("username and password don't match"))
-	}
-
-	// If login request is as owner, make sure this account is owner
-	if request.Owner && !account.Owner {
-		panic(fmt.Errorf("account level is not sufficient as owner"))
-	}
-
-	// Calculate expiration time
-	expTime := time.Hour
-	if request.Remember > 0 {
-		expTime = time.Duration(request.Remember) * time.Hour
-	} else {
-		expTime = -1
-	}
-
-	// Create session
-	genSession(account, expTime)
-}
-
-// apiLogout is handler for POST /api/logout
-func (h *handler) apiLogout(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	// Get session ID
-	sessionID := h.getSessionID(r)
-	if sessionID != "" {
-		h.SessionCache.Delete(sessionID)
-	}
-
-	fmt.Fprint(w, 1)
-}
-
 // apiGetBookmarks is handler for GET /api/bookmarks
 func (h *handler) apiGetBookmarks(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	// Make sure session still valid
-	err := h.validateSession(r)
-	checkError(err)
-
 	// Get URL queries
 	keyword := r.URL.Query().Get("keyword")
 	strPage := r.URL.Query().Get("page")
@@ -197,10 +90,6 @@ func (h *handler) apiGetBookmarks(w http.ResponseWriter, r *http.Request, ps htt
 
 // apiGetTags is handler for GET /api/tags
 func (h *handler) apiGetTags(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	// Make sure session still valid
-	err := h.validateSession(r)
-	checkError(err)
-
 	// Fetch all tags
 	tags, err := h.DB.GetTags()
 	checkError(err)
@@ -212,13 +101,9 @@ func (h *handler) apiGetTags(w http.ResponseWriter, r *http.Request, ps httprout
 
 // apiRenameTag is handler for PUT /api/tag
 func (h *handler) apiRenameTag(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	// Make sure session still valid
-	err := h.validateSession(r)
-	checkError(err)
-
 	// Decode request
 	tag := model.Tag{}
-	err = json.NewDecoder(r.Body).Decode(&tag)
+	err := json.NewDecoder(r.Body).Decode(&tag)
 	checkError(err)
 
 	// Update name
@@ -230,13 +115,9 @@ func (h *handler) apiRenameTag(w http.ResponseWriter, r *http.Request, ps httpro
 
 // apiInsertBookmark is handler for POST /api/bookmark
 func (h *handler) apiInsertBookmark(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	// Make sure session still valid
-	err := h.validateSession(r)
-	checkError(err)
-
 	// Decode request
 	book := model.Bookmark{}
-	err = json.NewDecoder(r.Body).Decode(&book)
+	err := json.NewDecoder(r.Body).Decode(&book)
 	checkError(err)
 
 	// Create bookmark ID
@@ -290,13 +171,9 @@ func (h *handler) apiInsertBookmark(w http.ResponseWriter, r *http.Request, ps h
 
 // apiDeleteBookmarks is handler for DELETE /api/bookmark
 func (h *handler) apiDeleteBookmark(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	// Make sure session still valid
-	err := h.validateSession(r)
-	checkError(err)
-
 	// Decode request
 	ids := []int{}
-	err = json.NewDecoder(r.Body).Decode(&ids)
+	err := json.NewDecoder(r.Body).Decode(&ids)
 	checkError(err)
 
 	// Delete bookmarks
@@ -318,13 +195,9 @@ func (h *handler) apiDeleteBookmark(w http.ResponseWriter, r *http.Request, ps h
 
 // apiUpdateBookmark is handler for PUT /api/bookmarks
 func (h *handler) apiUpdateBookmark(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	// Make sure session still valid
-	err := h.validateSession(r)
-	checkError(err)
-
 	// Decode request
 	request := model.Bookmark{}
-	err = json.NewDecoder(r.Body).Decode(&request)
+	err := json.NewDecoder(r.Body).Decode(&request)
 	checkError(err)
 
 	// Validate input
@@ -393,10 +266,6 @@ func (h *handler) apiUpdateBookmark(w http.ResponseWriter, r *http.Request, ps h
 
 // apiUpdateCache is handler for PUT /api/cache
 func (h *handler) apiUpdateCache(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	// Make sure session still valid
-	err := h.validateSession(r)
-	checkError(err)
-
 	// Decode request
 	request := struct {
 		IDs           []int `json:"ids"`
@@ -404,7 +273,7 @@ func (h *handler) apiUpdateCache(w http.ResponseWriter, r *http.Request, ps http
 		CreateArchive bool  `json:"createArchive"`
 	}{}
 
-	err = json.NewDecoder(r.Body).Decode(&request)
+	err := json.NewDecoder(r.Body).Decode(&request)
 	checkError(err)
 
 	// Get existing bookmark from database
@@ -510,17 +379,13 @@ func (h *handler) apiUpdateCache(w http.ResponseWriter, r *http.Request, ps http
 
 // apiUpdateBookmarkTags is handler for PUT /api/bookmarks/tags
 func (h *handler) apiUpdateBookmarkTags(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	// Make sure session still valid
-	err := h.validateSession(r)
-	checkError(err)
-
 	// Decode request
 	request := struct {
 		IDs  []int       `json:"ids"`
 		Tags []model.Tag `json:"tags"`
 	}{}
 
-	err = json.NewDecoder(r.Body).Decode(&request)
+	err := json.NewDecoder(r.Body).Decode(&request)
 	checkError(err)
 
 	// Validate input
@@ -580,10 +445,6 @@ func (h *handler) apiUpdateBookmarkTags(w http.ResponseWriter, r *http.Request, 
 
 // apiGetAccounts is handler for GET /api/accounts
 func (h *handler) apiGetAccounts(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	// Make sure session still valid
-	err := h.validateSession(r)
-	checkError(err)
-
 	// Get list of usernames from database
 	accounts, err := h.DB.GetAccounts(database.GetAccountsOptions{})
 	checkError(err)
@@ -595,13 +456,9 @@ func (h *handler) apiGetAccounts(w http.ResponseWriter, r *http.Request, ps http
 
 // apiInsertAccount is handler for POST /api/accounts
 func (h *handler) apiInsertAccount(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	// Make sure session still valid
-	err := h.validateSession(r)
-	checkError(err)
-
 	// Decode request
 	var account model.Account
-	err = json.NewDecoder(r.Body).Decode(&account)
+	err := json.NewDecoder(r.Body).Decode(&account)
 	checkError(err)
 
 	// Save account to database
@@ -613,10 +470,6 @@ func (h *handler) apiInsertAccount(w http.ResponseWriter, r *http.Request, ps ht
 
 // apiUpdateAccount is handler for PUT /api/accounts
 func (h *handler) apiUpdateAccount(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	// Make sure session still valid
-	err := h.validateSession(r)
-	checkError(err)
-
 	// Decode request
 	request := struct {
 		Username    string `json:"username"`
@@ -625,7 +478,7 @@ func (h *handler) apiUpdateAccount(w http.ResponseWriter, r *http.Request, ps ht
 		Owner       bool   `json:"owner"`
 	}{}
 
-	err = json.NewDecoder(r.Body).Decode(&request)
+	err := json.NewDecoder(r.Body).Decode(&request)
 	checkError(err)
 
 	// Get existing account data from database
@@ -646,46 +499,19 @@ func (h *handler) apiUpdateAccount(w http.ResponseWriter, r *http.Request, ps ht
 	err = h.DB.SaveAccount(account)
 	checkError(err)
 
-	// Delete user's sessions
-	if val, found := h.UserCache.Get(request.Username); found {
-		userSessions := val.([]string)
-		for _, session := range userSessions {
-			h.SessionCache.Delete(session)
-		}
-
-		h.UserCache.Delete(request.Username)
-	}
-
 	fmt.Fprint(w, 1)
 }
 
 // apiDeleteAccount is handler for DELETE /api/accounts
 func (h *handler) apiDeleteAccount(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	// Make sure session still valid
-	err := h.validateSession(r)
-	checkError(err)
-
 	// Decode request
 	usernames := []string{}
-	err = json.NewDecoder(r.Body).Decode(&usernames)
+	err := json.NewDecoder(r.Body).Decode(&usernames)
 	checkError(err)
 
 	// Delete accounts
 	err = h.DB.DeleteAccounts(usernames...)
 	checkError(err)
-
-	// Delete user's sessions
-	userSessions := []string{}
-	for _, username := range usernames {
-		if val, found := h.UserCache.Get(username); found {
-			userSessions = val.([]string)
-			for _, session := range userSessions {
-				h.SessionCache.Delete(session)
-			}
-
-			h.UserCache.Delete(username)
-		}
-	}
 
 	fmt.Fprint(w, 1)
 }

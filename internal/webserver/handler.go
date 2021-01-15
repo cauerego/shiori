@@ -1,12 +1,9 @@
 package webserver
 
 import (
-	"fmt"
 	"html/template"
-	"net/http"
 
 	"shiori/internal/database"
-	"shiori/internal/model"
 	"github.com/go-shiori/warc"
 	cch "github.com/patrickmn/go-cache"
 )
@@ -19,30 +16,9 @@ type handler struct {
 	DataDir      string
 	RootPath     string
 	UserCache    *cch.Cache
-	SessionCache *cch.Cache
 	ArchiveCache *cch.Cache
 
 	templates map[string]*template.Template
-}
-
-func (h *handler) prepareSessionCache() {
-	h.SessionCache.OnEvicted(func(key string, val interface{}) {
-		account := val.(model.Account)
-		arr, found := h.UserCache.Get(account.Username)
-		if !found {
-			return
-		}
-
-		sessionIDs := arr.([]string)
-		for i := 0; i < len(sessionIDs); i++ {
-			if sessionIDs[i] == key {
-				sessionIDs = append(sessionIDs[:i], sessionIDs[i+1:]...)
-				break
-			}
-		}
-
-		h.UserCache.Set(account.Username, sessionIDs, -1)
-	})
 }
 
 func (h *handler) prepareArchiveCache() {
@@ -64,8 +40,8 @@ func (h *handler) prepareTemplates() error {
 		},
 	}
 
-	// Create template for login, index and content
-	for _, name := range []string{"login", "index", "content"} {
+	// Create template for index and content
+	for _, name := range []string{"index", "content"} {
 		h.templates[name], err = createTemplate(name+".html", funcMap)
 		if err != nil {
 			return err
@@ -82,50 +58,6 @@ func (h *handler) prepareTemplates() error {
 		</div>`)
 	if err != nil {
 		return err
-	}
-
-	return nil
-}
-
-func (h *handler) getSessionID(r *http.Request) string {
-	// Get session-id from header and cookie
-	headerSessionID := r.Header.Get("X-Session-Id")
-	cookieSessionID := func() string {
-		cookie, err := r.Cookie("session-id")
-		if err != nil {
-			return ""
-		}
-
-		return cookie.Value
-	}()
-
-	// Session ID in cookie is more priority than in header
-	sessionID := headerSessionID
-	if cookieSessionID != "" {
-		sessionID = cookieSessionID
-	}
-
-	return sessionID
-}
-
-// validateSession checks whether user session is still valid or not
-func (h *handler) validateSession(r *http.Request) error {
-	sessionID := h.getSessionID(r)
-	if sessionID == "" {
-		return fmt.Errorf("session is not exist")
-	}
-
-	// Make sure session is not expired yet
-	val, found := h.SessionCache.Get(sessionID)
-	if !found {
-		return fmt.Errorf("session has been expired")
-	}
-
-	// If this is not get request, make sure it's owner
-	if r.Method != "" && r.Method != "GET" {
-		if account := val.(model.Account); !account.Owner {
-			return fmt.Errorf("account level is not sufficient")
-		}
 	}
 
 	return nil

@@ -80,19 +80,7 @@ export default {
 					return err;
 			}
 		},
-		isSessionError(err) {
-			switch (err.toString().replace(/\(\d+\)/g, "").trim().toLowerCase()) {
-				case "session is not exist":
-				case "session has been expired":
-					return true
-				default:
-					return false;
-			}
-		},
 		showErrorDialog(msg) {
-			var sessionError = this.isSessionError(msg),
-				dialogContent = sessionError ? "Session has expired, please login again." : msg;
-
 			this.showDialog({
 				visible: true,
 				title: 'Error',
@@ -100,13 +88,6 @@ export default {
 				mainText: 'OK',
 				mainClick: () => {
 					this.dialog.visible = false;
-					if (sessionError) {
-						var loginUrl = new Url("login", document.baseURI);
-						loginUrl.query.dst = window.location.href;
-
-						document.cookie = `session-id=; Path=${new URL(document.baseURI).pathname}; Expires=Thu, 01 Jan 1970 00:00:00 GMT;`;
-						location.href = loginUrl.toString();
-					}
 				}
 			});
 		},

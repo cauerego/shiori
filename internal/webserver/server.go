@@ -28,12 +28,10 @@ func ServeApp(cfg Config) error {
 		DB:           cfg.DB,
 		DataDir:      cfg.DataDir,
 		UserCache:    cch.New(time.Hour, 10*time.Minute),
-		SessionCache: cch.New(time.Hour, 10*time.Minute),
 		ArchiveCache: cch.New(time.Minute, 5*time.Minute),
 		RootPath:     cfg.RootPath,
 	}
 
-	hdl.prepareSessionCache()
 	hdl.prepareArchiveCache()
 
 	err := hdl.prepareTemplates()
@@ -55,13 +53,10 @@ func ServeApp(cfg Config) error {
 	router.GET(jp("/fonts/*filepath"), hdl.serveFile)
 
 	router.GET(jp("/"), hdl.serveIndexPage)
-	router.GET(jp("/login"), hdl.serveLoginPage)
 	router.GET(jp("/bookmark/:id/thumb"), hdl.serveThumbnailImage)
 	router.GET(jp("/bookmark/:id/content"), hdl.serveBookmarkContent)
 	router.GET(jp("/bookmark/:id/archive/*filepath"), hdl.serveBookmarkArchive)
 
-	router.POST(jp("/api/login"), hdl.apiLogin)
-	router.POST(jp("/api/logout"), hdl.apiLogout)
 	router.GET(jp("/api/bookmarks"), hdl.apiGetBookmarks)
 	router.GET(jp("/api/tags"), hdl.apiGetTags)
 	router.PUT(jp("/api/tag"), hdl.apiRenameTag)
