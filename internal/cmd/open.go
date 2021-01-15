@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-shiori/shiori/internal/database"
+	"shiori/internal/database"
 	"github.com/go-shiori/warc"
 	"github.com/julienschmidt/httprouter"
 	"github.com/spf13/cobra"

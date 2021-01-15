@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-shiori/shiori/internal/database"
-	"github.com/go-shiori/shiori/internal/model"
+	"shiori/internal/database"
+	"shiori/internal/model"
 	"github.com/spf13/cobra"
 )
 
